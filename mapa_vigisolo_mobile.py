@@ -95,4 +95,4 @@ if st.session_state.mostrar_mapa:
         st.warning("🙁 Nenhum dado encontrado com os filtros aplicados.")
 
 # Rodapé
-st.markdown("<p style='text-align:center; font-size:14px;'>Feito com ❤️ para funcionar suave no seu celular</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; font-size:14px;'>Desenvolvido por Walter alves</p>", unsafe_allow_html=True)
