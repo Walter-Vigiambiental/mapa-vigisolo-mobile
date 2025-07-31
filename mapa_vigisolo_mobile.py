@@ -45,7 +45,7 @@ with st.expander("🔍 Filtros de busca"):
 
 # Botão toggle para controlar exibição do mapa
 exibir = st.checkbox("📍 Visualizar Mapa", value=st.session_state.mostrar_mapa)
-st.session_state.mostrar_mapa = exibir
+st.session_state.mostrar_mapa = True
 
 # Aplicar filtros
 df_filtrado = df.copy()
