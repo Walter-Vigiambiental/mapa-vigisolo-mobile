@@ -4,14 +4,15 @@ import folium
 from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
 
-# URL do CSV público
+# URL da planilha pública (CSV)
 sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4rNqe1-YHIaKxLgyEbhN0tNytQixaNJnVfcyI0PN6ajT0KXzIGlh_dBrWFs6R9QqCEJ_UTGp3KOmL/pub?gid=317759421&single=true&output=csv"
 
-# Configuração da página mobile-friendly
+# Configuração da página
 st.set_page_config(page_title="Mapa VigiSolo", layout="centered", initial_sidebar_state="collapsed")
 st.markdown("<h2 style='text-align:center;'>🗺️ Mapa Áreas Programa VigiSolo</h2>", unsafe_allow_html=True)
 
 # Carregar dados
+@st.cache_data
 def carregar_dados():
     df = pd.read_csv(sheet_url)
     df[['lat', 'lon']] = df['COORDENADAS'].str.split(', ', expand=True).astype(float)
@@ -22,52 +23,57 @@ def carregar_dados():
 
 df = carregar_dados()
 
-# Mapeamento de meses
 meses_nome = {
     1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
     7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
-# 🔍 Filtros recolhíveis para layout mais limpo no mobile
-with st.expander("🔎 Filtros de busca"):
+# Inicializar estado da sessão
+if "mostrar_mapa" not in st.session_state:
+    st.session_state.mostrar_mapa = False
+
+with st.expander("🔍 Filtros de busca"):
     anos = sorted(df['ANO'].dropna().unique())
-    meses_numeros = sorted(df['MES'].dropna().unique())
+    meses = sorted(df['MES'].dropna().unique())
     bairros = sorted(df['BAIRRO'].dropna().unique())
     contaminantes = sorted(df['CONTAMINANTES'].dropna().unique())
 
-    ano_selecionado = st.selectbox("Ano", ["Todos"] + list(anos))
-    mes_selecionado_nome = st.selectbox("Mês", ["Todos"] + [meses_nome[m] for m in meses_numeros])
-    bairro_selecionado = st.selectbox("Bairro", ["Todos"] + bairros)
-    contaminante_selecionado = st.selectbox("Contaminante", ["Todos"] + contaminantes)
+    ano = st.selectbox("Ano", ["Todos"] + list(anos), key="ano_filtro")
+    mes_nome = st.selectbox("Mês", ["Todos"] + [meses_nome[m] for m in meses], key="mes_filtro")
+    bairro = st.selectbox("Bairro", ["Todos"] + bairros, key="bairro_filtro")
+    contaminante = st.selectbox("Contaminante", ["Todos"] + contaminantes, key="cont_filtro")
+
+# Botão toggle para controlar exibição do mapa
+exibir = st.checkbox("📍 Visualizar Mapa", value=st.session_state.mostrar_mapa)
+st.session_state.mostrar_mapa = exibir
 
 # Aplicar filtros
 df_filtrado = df.copy()
-if ano_selecionado != "Todos":
-    df_filtrado = df_filtrado[df_filtrado['ANO'] == ano_selecionado]
-if mes_selecionado_nome != "Todos":
-    mes_num = [num for num, nome in meses_nome.items() if nome == mes_selecionado_nome][0]
-    df_filtrado = df_filtrado[df_filtrado['MES'] == mes_num]
-if bairro_selecionado != "Todos":
-    df_filtrado = df_filtrado[df_filtrado['BAIRRO'] == bairro_selecionado]
-if contaminante_selecionado != "Todos":
-    df_filtrado = df_filtrado[df_filtrado['CONTAMINANTES'] == contaminante_selecionado]
+if st.session_state.ano_filtro != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["ANO"] == st.session_state.ano_filtro]
+if st.session_state.mes_filtro != "Todos":
+    mes_num = [num for num, nome in meses_nome.items() if nome == st.session_state.mes_filtro][0]
+    df_filtrado = df_filtrado[df_filtrado["MES"] == mes_num]
+if st.session_state.bairro_filtro != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["BAIRRO"] == st.session_state.bairro_filtro]
+if st.session_state.cont_filtro != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["CONTAMINANTES"] == st.session_state.cont_filtro]
 
-# Botão para gerar mapa
-if st.button("📍 Visualizar Mapa"):
+# Criar mapa se checkbox estiver ativo
+if st.session_state.mostrar_mapa:
     if not df_filtrado.empty:
-        centro_mapa = df_filtrado[['lat', 'lon']].mean().tolist()
+        centro_mapa = df_filtrado[["lat", "lon"]].mean().tolist()
         m = folium.Map(location=centro_mapa, zoom_start=13, control_scale=True)
         cluster = MarkerCluster().add_to(m)
 
         for _, row in df_filtrado.iterrows():
-            imagem_html = f'<br><img src="{row["URL_FOTO"]}" width="200">' if pd.notna(row.get("URL_FOTO")) else ""
+            imagem_html = f'<br><img src="{row["URL_FOTO"]}" width="220">' if pd.notna(row.get("URL_FOTO")) else ""
             popup_text = (
                 f"<strong>{row['DENOMINAÇÃO DA ÁREA']}</strong><br>"
                 f"Bairro: {row['BAIRRO']}<br>"
                 f"Contaminantes: {row['CONTAMINANTES']}<br>"
                 f"População Exposta: {row['POPULAÇÃO EXPOSTA']}<br>"
                 f"Data: {row['DATA'].date()}<br>"
-                f"Coordenadas: {row['lat']}, {row['lon']}"
                 f"{imagem_html}"
             )
 
@@ -78,17 +84,15 @@ if st.button("📍 Visualizar Mapa"):
                 "green" if "baixa" in risco else "gray"
             )
 
-            popup = folium.Popup(popup_text, max_width=280)
             folium.Marker(
                 location=[row['lat'], row['lon']],
-                popup=popup,
+                popup=folium.Popup(popup_text, max_width=280),
                 icon=folium.Icon(color=cor_icon, icon="info-sign"),
             ).add_to(cluster)
 
-        # Mapa ajustado para tela de celular
         st_folium(m, width="100%", height=500)
     else:
         st.warning("🙁 Nenhum dado encontrado com os filtros aplicados.")
 
 # Rodapé
-st.markdown("<p style='text-align:center; font-size:14px;'>Feito com ❤️ para funcionar no seu celular</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; font-size:14px;'>Feito com ❤️ para funcionar suave no seu celular</p>", unsafe_allow_html=True)
